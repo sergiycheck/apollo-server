@@ -212,7 +212,7 @@ export function defineIntegrationTestSuiteApolloServerTests(
             Field(node: FieldDefinitionNode) {
               if (node.name.value === 'testString') {
                 context.reportError(
-                  new GraphQLError('Not allowed to use', [node]),
+                  new GraphQLError('Not allowed to use', { nodes: [node] }),
                 );
               }
             },

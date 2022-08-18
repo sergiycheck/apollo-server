@@ -23,9 +23,9 @@ export interface GraphQLRequest {
 export type VariableValues = { [name: string]: any };
 
 export interface GraphQLResponse {
-  // TODO(AS4): for incremental delivery, maybe we'll have an iterator here
-  // instead of a single result?
   result: FormattedExecutionResult;
+  // FIXME doc
+  subsequentResults: AsyncIterable<FormattedExecutionResult> | null;
   http: HTTPGraphQLHead;
 }
 

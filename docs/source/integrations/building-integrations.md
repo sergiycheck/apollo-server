@@ -215,6 +215,8 @@ the execution result just as it would in the error case.
 
 #### Send the response
 
+FIXME update
+
 After awaiting the Promise returned by `executeHTTPGraphQLRequest`, we receive an `HTTPGraphQLResponse` type. At this point, your handler should respond to the client based on the conventions of your framework.
 
 ```ts

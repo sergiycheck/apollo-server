@@ -9,6 +9,9 @@ import {
   execute as graphqlExecute,
   Kind,
   ExecutionResult,
+  AsyncExecutionResult,
+  FormattedExecutionResult,
+  IncrementalResult,
 } from 'graphql';
 import {
   symbolExecutionDispatcherWillResolveField,
@@ -95,6 +98,18 @@ const getPersistedQueryErrorHttp = () => ({
     ['cache-control', 'private, no-cache, must-revalidate'],
   ]),
 });
+
+interface FullExecutionResult {
+  // FIXME: I would really prefer that graphql-js separate "first result" from "only result" type-wise
+  mainResult: ExecutionResult;
+  subsequentResults: AsyncIterable<AsyncExecutionResult> | null;
+}
+
+export function isAsyncIterable(
+  maybeAsyncIterable: any,
+): maybeAsyncIterable is AsyncIterable<unknown> {
+  return typeof maybeAsyncIterable?.[Symbol.asyncIterator] === 'function';
+}
 
 export async function processGraphQLRequest<TContext extends BaseContext>(
   schemaDerivedData: SchemaDerivedData,
@@ -416,9 +431,10 @@ export async function processGraphQLRequest<TContext extends BaseContext>(
 
     let statusIfExecuteThrows = 500;
     try {
-      const result = await execute(
+      const fullResult = await execute(
         requestContext as GraphQLRequestContextExecutionDidStart<TContext>,
       );
+      const result = fullResult.mainResult;
 
       // If we don't have an operation, there's no reason to go further. We know
       // `result` will consist of one error (returned by `graphql-js`'s
@@ -459,7 +475,9 @@ export async function processGraphQLRequest<TContext extends BaseContext>(
         ...result,
         errors: resultErrors ? formatErrors(resultErrors) : undefined,
       };
+      requestContext.response.subsequentResults = fullResult.subsequentResults;
 
+      // FIXME is it correct to run executionDidEnd after the first result?
       await Promise.all(executionListeners.map((l) => l.executionDidEnd?.()));
     } catch (executionMaybeError: unknown) {
       const executionError = ensureError(executionMaybeError);
@@ -479,16 +497,16 @@ export async function processGraphQLRequest<TContext extends BaseContext>(
 
   async function execute(
     requestContext: GraphQLRequestContextExecutionDidStart<TContext>,
-  ): Promise<ExecutionResult> {
+  ): Promise<FullExecutionResult> {
     const { request, document } = requestContext;
 
     if (internals.gatewayExecutor) {
       const result = await internals.gatewayExecutor(
         makeGatewayGraphQLRequestContext(requestContext, server, internals),
       );
-      return result;
+      return { mainResult: result, subsequentResults: null };
     } else {
-      return await graphqlExecute({
+      const resultOrGenerator = await graphqlExecute({
         schema: schemaDerivedData.schema,
         document,
         rootValue:
@@ -500,6 +518,49 @@ export async function processGraphQLRequest<TContext extends BaseContext>(
         operationName: request.operationName,
         fieldResolver: internals.fieldResolver,
       });
+      if (isAsyncIterable(resultOrGenerator)) {
+        // Incremental delivery!
+        const firstResult = await resultOrGenerator.next();
+        if (firstResult.done) {
+          throw new Error(
+            'Unexpected error: execute returned an empty async iterator',
+          );
+        }
+        return {
+          mainResult: firstResult.value,
+          subsequentResults: formatErrorsInSubsequentResults(resultOrGenerator),
+        };
+      } else {
+        return { mainResult: resultOrGenerator, subsequentResults: null };
+      }
+    }
+  }
+
+  // TODO(AS4): We removed `formatResponse` in AS4 but maybe it would
+  // actually be helpful in this function?
+  async function* formatErrorsInSubsequentResults(
+    results: AsyncIterable<AsyncExecutionResult>,
+  ): AsyncIterable<FormattedExecutionResult> {
+    for await (const result of results) {
+      // FIXME I really want to be able to assume that there is an `incremental`
+      // field on all subsequent results.
+      // https://github.com/graphql/graphql-js/pull/3659#issuecomment-1218782584
+      yield result.incremental
+        ? {
+            ...result,
+            incremental: result.incremental.map((incrementalResult) =>
+              incrementalResult.errors
+                ? ({
+                    ...incrementalResult,
+                    errors: formatErrors(incrementalResult.errors),
+                    // FIXME cast is needed because FormattedExecutionResult
+                    // incorrectly lacks a FormattedIncrementalResult
+                    // https://github.com/graphql/graphql-js/pull/3659#discussion_r948549912
+                  } as IncrementalResult)
+                : incrementalResult,
+            ),
+          }
+        : result;
     }
   }
 

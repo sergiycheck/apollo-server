@@ -206,11 +206,44 @@ export async function runHttpQuery<TContext extends BaseContext>(
     orderExecutionResultFields(graphQLResponse.result),
   );
 
+  if (!graphQLResponse.subsequentResults) {
+    return {
+      ...graphQLResponse.http,
+      body: { kind: 'complete', string: body },
+    };
+  }
+
+  graphQLResponse.http.headers.set(
+    'content-type',
+    'multipart/mixed; boundary="-"',
+  );
   return {
     ...graphQLResponse.http,
-    completeBody: body,
-    bodyChunks: null,
+    body: {
+      kind: 'chunked',
+      asyncIterator: writeMultipartBody(
+        graphQLResponse.result,
+        graphQLResponse.subsequentResults,
+      ),
+    },
   };
+}
+
+async function* writeMultipartBody(
+  initialResult: FormattedExecutionResult,
+  subsequentResults: AsyncIterable<FormattedExecutionResult>,
+): AsyncGenerator<string> {
+  // TODO(AS4): charset=utf-8? in the main content-type too?
+  yield `\r\n---\r\ncontent-type: application/json\r\n\r\n${JSON.stringify(
+    orderExecutionResultFields(initialResult),
+  )}\r\n---${initialResult.hasNext ? '' : '--'}\r\n`;
+  for await (const result of subsequentResults) {
+    yield `content-type: application/json\r\n\r\n${JSON.stringify(
+      orderExecutionResultFields(result),
+    )}\r\n---${result.hasNext ? '' : '--'}\r\n`;
+  }
+  // FIXME is it reasonable to rely on the fact that graphql execute will always
+  // return hasNext:true precisely on the last part, or should we validate?
 }
 
 function orderExecutionResultFields(
@@ -221,7 +254,9 @@ function orderExecutionResultFields(
   return {
     errors: result.errors,
     data: result.data,
+    hasNext: result.hasNext,
     extensions: result.extensions,
+    incremental: result.incremental,
   };
 }
 

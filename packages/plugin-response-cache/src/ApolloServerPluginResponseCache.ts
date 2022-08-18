@@ -218,6 +218,7 @@ export default function plugin<TContext extends BaseContext>(
             age = Math.round((+new Date() - value.cacheTime) / 1000);
             return {
               result: { data: value.data },
+              subsequentResults: null,
               http: {
                 status: undefined,
                 headers: new Map(),
@@ -268,6 +269,8 @@ export default function plugin<TContext extends BaseContext>(
 
         async willSendResponse(requestContext) {
           const logger = requestContext.logger || console;
+
+          // FIXME don't cache incremental results (or better, cache them later)
 
           if (!isGraphQLQuery(requestContext)) {
             return;

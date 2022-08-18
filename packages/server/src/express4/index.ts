@@ -84,17 +84,23 @@ export function expressMiddleware<TContext extends BaseContext>(
         httpGraphQLRequest,
         context: () => context({ req, res }),
       })
-      .then((httpGraphQLResponse) => {
-        if (httpGraphQLResponse.completeBody === null) {
-          // TODO(AS4): Implement incremental delivery or improve error handling.
-          throw Error('Incremental delivery not implemented');
-        }
-
+      .then(async (httpGraphQLResponse) => {
         for (const [key, value] of httpGraphQLResponse.headers) {
           res.setHeader(key, value);
         }
         res.statusCode = httpGraphQLResponse.status || 200;
-        res.send(httpGraphQLResponse.completeBody);
+
+        if (httpGraphQLResponse.body.kind === 'complete') {
+          res.send(httpGraphQLResponse.body.string);
+          return;
+        }
+
+        // FIXME double check that this will always lead to chunked.
+        // FIXME error handling? is `then async` above legit?
+        for await (const chunk of httpGraphQLResponse.body.asyncIterator) {
+          res.write(chunk);
+        }
+        res.end();
       })
       .catch(next);
   };

@@ -943,8 +943,10 @@ export class ApolloServer<in out TContext extends BaseContext = BaseContext> {
       ) {
         return {
           headers: new HeaderMap([['content-type', 'text/html']]),
-          completeBody: runningServerState.landingPage.html,
-          bodyChunks: null,
+          body: {
+            kind: 'complete',
+            string: runningServerState.landingPage.html,
+          },
         };
       }
 
@@ -1038,14 +1040,16 @@ export class ApolloServer<in out TContext extends BaseContext = BaseContext> {
         ...httpGraphQLHead.headers,
         ['content-type', 'application/json'],
       ]),
-      completeBody: prettyJSONStringify({
-        errors: normalizeAndFormatErrors([error], {
-          includeStacktraceInErrorResponses:
-            this.internals.includeStacktraceInErrorResponses,
-          formatError: this.internals.formatError,
+      body: {
+        kind: 'complete',
+        string: prettyJSONStringify({
+          errors: normalizeAndFormatErrors([error], {
+            includeStacktraceInErrorResponses:
+              this.internals.includeStacktraceInErrorResponses,
+            formatError: this.internals.formatError,
+          }),
         }),
-      }),
-      bodyChunks: null,
+      },
     };
   }
 
@@ -1150,7 +1154,7 @@ export async function internalExecuteOperation<TContext extends BaseContext>({
     cache: server.cache,
     schema: schemaDerivedData.schema,
     request: graphQLRequest,
-    response: { result: {}, http: httpGraphQLHead },
+    response: { result: {}, subsequentResults: null, http: httpGraphQLHead },
     // We clone the context because there are some assumptions that every operation
     // execution has a brand new context object; specifically, in order to implement
     // willResolveField we put a Symbol on the context that is specific to a particular
