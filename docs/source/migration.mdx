@@ -722,6 +722,7 @@ new ApolloServer<MyContext>({
             const { response } = requestContext;
             // Augment response with an extension, as long
             // as the operation actually executed.
+            // FIXME not result
             if ('data' in response.result) {
               response.result.extensions = {
                 ...(response.result.extensions),
@@ -1120,6 +1121,7 @@ const server = new ApolloServer({
   context: async ({ req }) => ({ name: req.headers.name }),
 });
 
+// FIXME not result
 const { result } = await server.executeOperation({
   query: 'query helloContext { hello }',
 }, {
@@ -1151,6 +1153,7 @@ const server = new ApolloServer<MyContext>({
   },
 });
 
+// FIXME not result
 const { result } = await server.executeOperation({
   query: 'query helloContext { hello }',
 }, {
@@ -1414,6 +1417,7 @@ Specifically, the `http` field is now an `HTTPGraphQLRequest` type instead of a 
 
 Apollo Server 4 refactors the [`GraphQLResponse` object](https://github.com/apollographql/apollo-server/blob/version-4/packages/server/src/externalTypes/graphql.ts#L25), which is available to plugins as `requestContext.response` and is the type `server.executeOperation` returns.
 
+FIXME this is all different
 The `data`, `errors`, and `extensions` fields are now nested within an object returned by the `result` field:
 
 ```ts disableCopy

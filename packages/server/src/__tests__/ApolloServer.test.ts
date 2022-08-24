@@ -1,6 +1,6 @@
 import { ApolloServer } from '..';
 import type { ApolloServerOptions } from '..';
-import { GraphQLError, GraphQLSchema } from 'graphql';
+import { FormattedExecutionResult, GraphQLError, GraphQLSchema } from 'graphql';
 import type { ApolloServerPlugin, BaseContext } from '../externalTypes';
 import { ApolloServerPluginCacheControlDisabled } from '../plugin/disabled/index.js';
 import { ApolloServerPluginUsageReporting } from '../plugin/usageReporting/index.js';
@@ -9,6 +9,7 @@ import { HeaderMap } from '../runHttpQuery.js';
 import { mockLogger } from './mockLogger.js';
 import gql from 'graphql-tag';
 import type { GatewayInterface } from '@apollo/server-gateway-interface';
+import type { GraphQLResponseBody } from '../externalTypes/graphql';
 
 const typeDefs = gql`
   type Query {
@@ -240,6 +241,13 @@ describe('ApolloServer start', () => {
   });
 });
 
+function singleResult(body: GraphQLResponseBody): FormattedExecutionResult {
+  if (body.kind === 'single') {
+    return body.singleResult;
+  }
+  fail('unexpected incremental delivery');
+}
+
 describe('ApolloServer executeOperation', () => {
   it('returns error information without details by default', async () => {
     const server = new ApolloServer({
@@ -248,10 +256,11 @@ describe('ApolloServer executeOperation', () => {
     });
     await server.start();
 
-    const { result } = await server.executeOperation({
+    const { body } = await server.executeOperation({
       query: 'query { error }',
     });
 
+    const result = singleResult(body);
     expect(result.errors).toHaveLength(1);
     expect(result.errors?.[0].extensions).toStrictEqual({
       code: 'INTERNAL_SERVER_ERROR',
@@ -268,10 +277,11 @@ describe('ApolloServer executeOperation', () => {
     });
     await server.start();
 
-    const { result } = await server.executeOperation({
+    const { body } = await server.executeOperation({
       query: 'query { error }',
     });
 
+    const result = singleResult(body);
     expect(result.errors).toHaveLength(1);
     const extensions = result.errors?.[0].extensions;
     expect(extensions).toHaveProperty('code', 'INTERNAL_SERVER_ERROR');
@@ -287,7 +297,8 @@ describe('ApolloServer executeOperation', () => {
     });
     await server.start();
 
-    const { result } = await server.executeOperation({ query: '{ hello }' });
+    const { body } = await server.executeOperation({ query: '{ hello }' });
+    const result = singleResult(body);
     expect(result.errors).toBeUndefined();
     expect(result.data?.hello).toBe('world');
     await server.stop();
@@ -300,13 +311,14 @@ describe('ApolloServer executeOperation', () => {
     });
     await server.start();
 
-    const { result } = await server.executeOperation({
+    const { body } = await server.executeOperation({
       query: gql`
         {
           hello
         }
       `,
     });
+    const result = singleResult(body);
     expect(result.errors).toBeUndefined();
     expect(result.data?.hello).toBe('world');
     await server.stop();
@@ -319,7 +331,8 @@ describe('ApolloServer executeOperation', () => {
     });
     await server.start();
 
-    const { result } = await server.executeOperation({ query: '{' });
+    const { body } = await server.executeOperation({ query: '{' });
+    const result = singleResult(body);
     expect(result.errors).toEqual([
       {
         message: 'Syntax Error: Expected Name, found <EOF>.',
@@ -339,7 +352,8 @@ describe('ApolloServer executeOperation', () => {
     });
     await server.start();
 
-    const { result } = await server.executeOperation({ query: '{ unknown }' });
+    const { body } = await server.executeOperation({ query: '{ unknown }' });
+    const result = singleResult(body);
     expect(result.errors).toEqual([
       {
         message: 'Cannot query field "unknown" on type "Query".',
@@ -359,10 +373,11 @@ describe('ApolloServer executeOperation', () => {
     });
     await server.start();
 
-    const { result } = await server.executeOperation(
+    const { body } = await server.executeOperation(
       { query: '{ contextFoo }' },
       { foo: 'bla' },
     );
+    const result = singleResult(body);
     expect(result.errors).toBeUndefined();
     expect(result.data?.contextFoo).toBe('bla');
     await server.stop();
@@ -401,19 +416,21 @@ describe('ApolloServer executeOperation', () => {
         ],
       });
       await server.start();
-      const { result } = await server.executeOperation(
+      const { body } = await server.executeOperation(
         { query: '{ n }' },
         { foo: 123 },
       );
+      const result = singleResult(body);
       expect(result.errors).toBeUndefined();
       expect(result.data?.n).toBe(123);
 
-      const { result: result2 } = await server.executeOperation(
+      const { body: body2 } = await server.executeOperation(
         { query: '{ n }' },
         // It knows that context.foo is a number so it doesn't work as a string.
         // @ts-expect-error
         { foo: 'asdf' },
       );
+      const result2 = singleResult(body2);
       // GraphQL will be sad that a string was returned from an Int! field.
       expect(result2.errors).toBeDefined();
       await server.stop();

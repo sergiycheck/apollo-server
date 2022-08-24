@@ -45,7 +45,10 @@ async function runQuery<TContext extends BaseContext>(
     contextValue ?? ({} as TContext),
   );
   await server.stop();
-  return response.result;
+  if (!('singleResult' in response.body)) {
+    throw Error('expected single result');
+  }
+  return response.body.singleResult;
 }
 
 const queryType = new GraphQLObjectType({

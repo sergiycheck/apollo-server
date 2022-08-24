@@ -1154,7 +1154,11 @@ export async function internalExecuteOperation<TContext extends BaseContext>({
     cache: server.cache,
     schema: schemaDerivedData.schema,
     request: graphQLRequest,
-    response: { result: {}, subsequentResults: null, http: httpGraphQLHead },
+    response: {
+      // FIXME explain
+      body: { kind: 'single', singleResult: {} },
+      http: httpGraphQLHead,
+    },
     // We clone the context because there are some assumptions that every operation
     // execution has a brand new context object; specifically, in order to implement
     // willResolveField we put a Symbol on the context that is specific to a particular

@@ -1307,7 +1307,12 @@ export function defineIntegrationTestSuiteHttpServerTests(
                   async willSendResponse(
                     requestContext: GraphQLRequestContext<BaseContext>,
                   ) {
-                    requestContext.response.result.extensions = { it: 'works' };
+                    if (!('singleResult' in requestContext.response.body)) {
+                      throw Error('expected single result');
+                    }
+                    requestContext.response.body.singleResult.extensions = {
+                      it: 'works',
+                    };
                   },
                 };
               },

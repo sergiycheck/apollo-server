@@ -217,8 +217,7 @@ export default function plugin<TContext extends BaseContext>(
             requestContext.metrics.responseCacheHit = true;
             age = Math.round((+new Date() - value.cacheTime) / 1000);
             return {
-              result: { data: value.data },
-              subsequentResults: null,
+              body: { kind: 'single', singleResult: { data: value.data } },
               http: {
                 status: undefined,
                 headers: new Map(),
@@ -271,6 +270,9 @@ export default function plugin<TContext extends BaseContext>(
           const logger = requestContext.logger || console;
 
           // FIXME don't cache incremental results (or better, cache them later)
+          if (requestContext.response.body.kind !== 'single') {
+            return;
+          }
 
           if (!isGraphQLQuery(requestContext)) {
             return;
@@ -291,7 +293,7 @@ export default function plugin<TContext extends BaseContext>(
             if (!shouldWriteToCache) return;
           }
 
-          const { data, errors } = requestContext.response.result;
+          const { data, errors } = requestContext.response.body.singleResult;
           const policyIfCacheable =
             requestContext.overallCachePolicy.policyIfCacheable();
           if (errors || !data || !policyIfCacheable) {

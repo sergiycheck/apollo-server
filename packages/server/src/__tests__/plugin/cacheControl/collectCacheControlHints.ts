@@ -26,10 +26,14 @@ export async function collectCacheControlHintsAndPolicyIfCacheable(
         async requestDidStart() {
           return {
             async willSendResponse({ response, overallCachePolicy }) {
-              if (!response.result.extensions) {
-                response.result.extensions = {};
+              if (!('singleResult' in response.body)) {
+                throw Error('expected single result');
               }
-              response.result.extensions.__policyIfCacheable__ =
+
+              if (!response.body.singleResult.extensions) {
+                response.body.singleResult.extensions = {};
+              }
+              response.body.singleResult.extensions.__policyIfCacheable__ =
                 overallCachePolicy.policyIfCacheable();
             },
           };
@@ -41,11 +45,16 @@ export async function collectCacheControlHintsAndPolicyIfCacheable(
   const response = await server.executeOperation({ query: source });
   await server.stop();
 
-  expect(response.result.errors).toBeUndefined();
+  if (!('singleResult' in response.body)) {
+    fail('expected single result');
+  }
+
+  expect(response.body.singleResult.errors).toBeUndefined();
 
   return {
     hints: cacheHints,
-    policyIfCacheable: response.result.extensions!.__policyIfCacheable__ as any,
+    policyIfCacheable: response.body.singleResult.extensions!
+      .__policyIfCacheable__ as any,
   };
 }
 

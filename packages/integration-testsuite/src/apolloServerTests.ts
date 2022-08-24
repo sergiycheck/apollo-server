@@ -639,13 +639,11 @@ export function defineIntegrationTestSuiteApolloServerTests(
                 async didResolveOperation() {
                   throw new Error('known_error');
                 },
-                async willSendResponse({
-                  response: {
-                    http,
-                    result: { errors },
-                  },
-                }) {
-                  if (errors![0].message === 'known_error') {
+                async willSendResponse({ response: { http, body } }) {
+                  if (
+                    body.kind === 'single' &&
+                    body.singleResult.errors?.[0].message === 'known_error'
+                  ) {
                     http!.status = 403;
                   }
                 },
@@ -665,7 +663,10 @@ export function defineIntegrationTestSuiteApolloServerTests(
             async requestDidStart() {
               return {
                 async willSendResponse({ response }) {
-                  response.result.extensions = { myExtension: true };
+                  if (!('singleResult' in response.body)) {
+                    throw Error('expected single result');
+                  }
+                  response.body.singleResult.extensions = { myExtension: true };
                 },
               };
             },
@@ -687,7 +688,10 @@ export function defineIntegrationTestSuiteApolloServerTests(
             async requestDidStart() {
               return {
                 async willSendResponse({ response }) {
-                  response.result.extensions = { myExtension: true };
+                  if (!('singleResult' in response.body)) {
+                    throw Error('expected single result');
+                  }
+                  response.body.singleResult.extensions = { myExtension: true };
                 },
               };
             },

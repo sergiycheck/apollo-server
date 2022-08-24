@@ -11,7 +11,13 @@ import {
   internalExecuteOperation,
   SchemaDerivedData,
 } from './ApolloServer.js';
-import { FormattedExecutionResult, Kind } from 'graphql';
+import {
+  FormattedExecutionResult,
+  FormattedIncrementalResult,
+  FormattedInitialIncrementalExecutionResult,
+  FormattedSubsequentIncrementalExecutionResult,
+  Kind,
+} from 'graphql';
 import { BadRequestError } from './internalErrorClasses.js';
 import { URLSearchParams } from 'url';
 
@@ -202,16 +208,19 @@ export async function runHttpQuery<TContext extends BaseContext>(
     schemaDerivedData,
   });
 
-  const body = prettyJSONStringify(
-    orderExecutionResultFields(graphQLResponse.result),
-  );
-
-  if (!graphQLResponse.subsequentResults) {
+  if (graphQLResponse.body.kind === 'single') {
     return {
       ...graphQLResponse.http,
-      body: { kind: 'complete', string: body },
+      body: {
+        kind: 'complete',
+        string: prettyJSONStringify(
+          orderExecutionResultFields(graphQLResponse.body.singleResult),
+        ),
+      },
     };
   }
+
+  // FIXME check for accept: multipart/mixed
 
   graphQLResponse.http.headers.set(
     'content-type',
@@ -222,42 +231,74 @@ export async function runHttpQuery<TContext extends BaseContext>(
     body: {
       kind: 'chunked',
       asyncIterator: writeMultipartBody(
-        graphQLResponse.result,
-        graphQLResponse.subsequentResults,
+        graphQLResponse.body.initialResult,
+        graphQLResponse.body.subsequentResults,
       ),
     },
   };
 }
 
 async function* writeMultipartBody(
-  initialResult: FormattedExecutionResult,
-  subsequentResults: AsyncIterable<FormattedExecutionResult>,
+  initialResult: FormattedInitialIncrementalExecutionResult,
+  subsequentResults: AsyncIterable<FormattedSubsequentIncrementalExecutionResult>,
 ): AsyncGenerator<string> {
   // TODO(AS4): charset=utf-8? in the main content-type too?
   yield `\r\n---\r\ncontent-type: application/json\r\n\r\n${JSON.stringify(
-    orderExecutionResultFields(initialResult),
+    orderInitialIncrementalExecutionResultFields(initialResult),
   )}\r\n---${initialResult.hasNext ? '' : '--'}\r\n`;
   for await (const result of subsequentResults) {
     yield `content-type: application/json\r\n\r\n${JSON.stringify(
-      orderExecutionResultFields(result),
+      orderSubsequentIncrementalExecutionResultFields(result),
     )}\r\n---${result.hasNext ? '' : '--'}\r\n`;
   }
   // FIXME is it reasonable to rely on the fact that graphql execute will always
   // return hasNext:true precisely on the last part, or should we validate?
 }
 
+// See https://github.com/facebook/graphql/pull/384 for why
+// errors comes first.
 function orderExecutionResultFields(
   result: FormattedExecutionResult,
 ): FormattedExecutionResult {
-  // See https://github.com/facebook/graphql/pull/384 for why
-  // errors comes first.
   return {
     errors: result.errors,
     data: result.data,
-    hasNext: result.hasNext,
     extensions: result.extensions,
-    incremental: result.incremental,
   };
+}
+function orderInitialIncrementalExecutionResultFields(
+  result: FormattedInitialIncrementalExecutionResult,
+): FormattedInitialIncrementalExecutionResult {
+  return {
+    hasNext: result.hasNext,
+    errors: result.errors,
+    data: result.data,
+    incremental: orderIncrementalResultFields(result.incremental),
+    extensions: result.extensions,
+  };
+}
+function orderSubsequentIncrementalExecutionResultFields(
+  result: FormattedSubsequentIncrementalExecutionResult,
+): FormattedSubsequentIncrementalExecutionResult {
+  return {
+    hasNext: result.hasNext,
+    incremental: orderIncrementalResultFields(result.incremental),
+    extensions: result.extensions,
+  };
+}
+
+function orderIncrementalResultFields(
+  incremental?: readonly FormattedIncrementalResult[],
+): undefined | FormattedIncrementalResult[] {
+  return incremental?.map((i: any) => ({
+    hasNext: i.hasNext,
+    errors: i.errors,
+    path: i.path,
+    label: i.label,
+    data: i.data,
+    items: i.items,
+    extensions: i.extensions,
+  }));
 }
 
 // The result of a curl does not appear well in the terminal, so we add an extra new line

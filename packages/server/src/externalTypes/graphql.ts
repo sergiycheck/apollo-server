@@ -2,6 +2,8 @@ import type { Trace } from '@apollo/usage-reporting-protobuf';
 import type {
   DocumentNode,
   FormattedExecutionResult,
+  FormattedInitialIncrementalExecutionResult,
+  FormattedSubsequentIncrementalExecutionResult,
   GraphQLError,
   GraphQLSchema,
   OperationDefinitionNode,
@@ -22,12 +24,22 @@ export interface GraphQLRequest {
 
 export type VariableValues = { [name: string]: any };
 
-export interface GraphQLResponse {
-  result: FormattedExecutionResult;
-  // FIXME doc
-  subsequentResults: AsyncIterable<FormattedExecutionResult> | null;
+// FIXME better docs
+export type GraphQLResponseBody =
+  | {
+      kind: 'single';
+      singleResult: FormattedExecutionResult;
+    }
+  | {
+      kind: 'incremental';
+      initialResult: FormattedInitialIncrementalExecutionResult;
+      subsequentResults: AsyncIterable<FormattedSubsequentIncrementalExecutionResult>;
+    };
+
+export type GraphQLResponse = {
   http: HTTPGraphQLHead;
-}
+  body: GraphQLResponseBody;
+};
 
 export interface GraphQLRequestMetrics {
   // It would be more accurate to call this fieldLevelInstrumentation (it is
