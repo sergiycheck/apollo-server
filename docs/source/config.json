@@ -41,6 +41,19 @@
       "CORS": "/security/cors",
       "Terminating SSL": "/security/terminating-ssl",
       "Proxy configuration": "/security/proxy-configuration"
+    },
+    "Built-in Plugins": {
+      "Overview": "/api/plugin/builtin-plugins",
+      "Usage reporting": "/api/plugin/usage-reporting",
+      "Schema reporting": "/api/plugin/schema-reporting",
+      "Inline trace": "/api/plugin/inline-trace",
+      "Drain HTTP server": "/api/plugin/drain-http-server",
+      "Cache control": "/api/plugin/cache-control",
+      "Landing pages": "/api/plugin/landing-pages"
+    },
+    "Custom Plugins": {
+      "Creating plugins": "/integrations/plugins",
+      "Event reference": "/integrations/plugins-event-reference"
     }
   }
 }
